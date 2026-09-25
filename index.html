@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CardSnap — visiting cards to contact list</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+
+    --ink:#151515;
+    --ink-soft:#7A7A7A;
+    --paper:#FFFFFF;
+    --paper-raised:#F6F8F1;
+    --paper-line:#E1E5D9;
+    --brass:#75BF00;
+    --brass-deep:#5C8F00;
+    --good:#5C8F00;
+    --bad:#B3261E;
+    --bg:#EEF2E7;
+    --shadow: 0 1px 0 rgba(0,0,0,.06);
+  }
+  :root:not([data-theme="light"]){
+    /* default = light ai4work look; dark handled below */
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#EDEDED;
+      --ink-soft:#9A9A9A;
+      --paper:#1D1D1D;
+      --paper-raised:#242424;
+      --paper-line:#343434;
+      --brass:#8FE000;
+      --brass-deep:#75BF00;
+      --bg:#101010;
+      --shadow: 0 1px 0 rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#EDEDED;
+    --ink-soft:#9A9A9A;
+    --paper:#1D1D1D;
+    --paper-raised:#242424;
+    --paper-line:#343434;
+    --brass:#8FE000;
+    --brass-deep:#75BF00;
+    --bg:#101010;
+    --shadow: 0 1px 0 rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:Calibri,"Segoe UI",'Inter',ui-sans-serif,system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100%;
+  }
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    padding:28px 20px 60px;
+  }
+
+  header.top{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+    margin-bottom:22px;
+    padding-bottom:16px;
+    border-bottom:2px solid var(--paper-line);
+  }
+  header.top h1{
+    font-weight:700;
+    font-size:clamp(24px,3.4vw,32px);
+    color:var(--ink);
+    margin:0;
+    letter-spacing:.2px;
+  }
+  header.top .tag{
+    color:var(--ink-soft);
+    font-size:14px;
+    max-width:38ch;
+    line-height:1.4;
+  }
+  .wordmark{font-weight:700;}
+  .wordmark .wm-ai{color:var(--ink);}
+  .wordmark .wm-4{color:var(--brass);}
+  .wordmark .wm-work{color:var(--ink-soft);}
+
+  /* ===== layout ===== */
+  .grid{
+    display:grid;
+    grid-template-columns: 300px 1fr;
+    gap:20px;
+    align-items:start;
+  }
+  @media (max-width:820px){
+    .grid{grid-template-columns:1fr;}
+  }
+
+  /* ===== drawer / intake panel (looks like a stack of index cards) ===== */
+  .drawer{
+    background:var(--paper);
+    border:1px solid var(--paper-line);
+    border-radius:6px;
+    padding:18px;
+    position:relative;
+    box-shadow: var(--shadow);
+  }
+  .drawer::before{
+    content:"";
+    position:absolute;
+    left:14px; right:14px; top:-6px;
+    height:6px;
+    background:var(--paper-line);
+    border-radius:4px 4px 0 0;
+    opacity:.6;
+  }
+  .drawer h2{
+    font-size:17px;
+    font-weight:700;
+    margin:0 0 4px;
+  }
+  .drawer p.hint{
+    font-size:13px;
+    color:var(--ink-soft);
+    line-height:1.5;
+    margin:0 0 14px;
+  }
+
+  .drop{
+    border:1.5px dashed var(--paper-line);
+    border-radius:5px;
+    padding:22px 14px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    background:var(--paper-raised);
+  }
+  .drop:hover, .drop.drag{
+    border-color:var(--brass);
+    background:color-mix(in srgb, var(--brass) 8%, var(--paper-raised));
+  }
+  .drop svg{width:26px;height:26px;stroke:var(--brass-deep);margin-bottom:8px;}
+  .drop .label{font-size:14px;font-weight:600;color:var(--ink);}
+  .drop .sub{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  input[type=file]{display:none;}
+
+  .queue{
+    margin-top:16px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .queue-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:var(--paper-raised);
+    border:1px solid var(--paper-line);
+    border-radius:5px;
+    padding:7px 9px;
+    font-size:12.5px;
+  }
+  .queue-item img{
+    width:34px;height:34px;object-fit:cover;border-radius:3px;
+    border:1px solid var(--paper-line);
+    flex:none;
+  }
+  .queue-item .qmeta{flex:1;min-width:0;}
+  .queue-item .qname{
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    font-weight:600;color:var(--ink);
+  }
+  .queue-item .qstate{color:var(--ink-soft);font-size:11.5px;}
+  .queue-item .qstate.err{color:var(--bad);}
+  .queue-item .qstate.ok{color:var(--good);}
+  .spinner{
+    width:12px;height:12px;border-radius:50%;
+    border:2px solid var(--paper-line);
+    border-top-color:var(--brass);
+    animation:spin .8s linear infinite;
+    flex:none;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .qretry{
+    background:none;border:1px solid var(--paper-line);border-radius:4px;
+    color:var(--ink);font-size:11px;padding:3px 7px;cursor:pointer;flex:none;
+  }
+  .qretry:hover{border-color:var(--brass);}
+
+  .no-sample-note{
+    margin-top:14px;
+    font-size:12.5px;
+    color:var(--bad);
+    line-height:1.5;
+    display:none;
+  }
+
+  /* ===== ledger (main table area) ===== */
+  .ledger{
+    background:var(--paper);
+    border:1px solid var(--paper-line);
+    border-radius:6px;
+    padding:18px 18px 8px;
+    box-shadow:var(--shadow);
+  }
+  .ledger-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .ledger-head h2{
+    font-size:17px;
+    font-weight:700;
+    margin:0;
+  }
+  .count-pill{
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-left:8px;
+    font-weight:400;
+  }
+  .actions{display:flex;gap:8px;flex-wrap:wrap;}
+  button.act{
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    padding:8px 13px;
+    border-radius:5px;
+    border:1px solid var(--paper-line);
+    background:var(--paper-raised);
+    color:var(--ink);
+    cursor:pointer;
+    transition:border-color .15s ease, transform .05s ease;
+  }
+  button.act:hover{border-color:var(--brass);}
+  button.act:active{transform:translateY(1px);}
+  button.act.primary{
+    background:var(--brass);
+    border-color:var(--brass-deep);
+    color:#151515;
+  }
+  button.act.primary:hover{background:var(--brass-deep);}
+  button.act:disabled{opacity:.45;cursor:not-allowed;}
+  button.act.danger{color:var(--bad);}
+
+  .table-scroll{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    border-radius:4px;
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13.5px;
+    min-width:760px;
+  }
+  thead th{
+    text-align:left;
+    font-weight:600;
+    color:var(--ink-soft);
+    font-size:11.5px;
+    padding:0 10px 8px;
+    border-bottom:1px solid var(--paper-line);
+    white-space:nowrap;
+  }
+  tbody td{
+    padding:8px 10px;
+    border-bottom:1px solid var(--paper-line);
+    vertical-align:top;
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr.pending td{color:var(--ink-soft);}
+  td[contenteditable="true"]{
+    outline:none;
+    min-width:70px;
+    border-radius:3px;
+  }
+  td[contenteditable="true"]:hover{background:rgba(117,191,0,.08);}
+  td[contenteditable="true"]:focus{
+    background:var(--paper-raised);
+    box-shadow:0 0 0 1.5px var(--brass);
+  }
+  td.name-cell{font-weight:600;min-width:120px;}
+  td.del-cell{padding:8px 6px;text-align:right;}
+  .del-btn{
+    border:none;background:none;color:var(--ink-soft);
+    cursor:pointer;font-size:15px;line-height:1;padding:4px;border-radius:3px;
+  }
+  .del-btn:hover{color:var(--bad);background:rgba(166,75,60,.1);}
+  .status-tag{
+    display:inline-block;
+    font-size:10.5px;
+    font-weight:600;
+    padding:2px 6px;
+    border-radius:3px;
+    background:rgba(166,75,60,.12);
+    color:var(--bad);
+  }
+
+  .empty{
+    padding:34px 10px 26px;
+    text-align:center;
+    color:var(--ink-soft);
+    font-size:13.5px;
+  }
+  .empty strong{display:block;color:var(--ink);font-size:15px;margin-bottom:4px;font-weight:700;}
+
+  footer.credit{
+    text-align:center;
+    color:var(--ink-soft);
+    font-size:11.5px;
+    margin-top:26px;
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+
+  .toast{
+    position:fixed;
+    left:50%;
+    bottom:calc(22px + env(safe-area-inset-bottom,0px));
+    transform:translate(-50%,12px);
+    background:var(--ink);
+    color:var(--paper);
+    font-size:13px;
+    padding:10px 16px;
+    border-radius:6px;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .18s ease, transform .18s ease;
+    z-index:50;
+    max-width:86vw;
+    text-align:center;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+
+  ::selection{background:rgba(180,131,42,.35);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>CardSnap</h1>
+      <div class="tag">Photograph a visiting card, get a clean row of contact data — ready for Google Sheets or Excel.</div>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- INTAKE -->
+    <div class="drawer">
+      <h2>Add cards</h2>
+      <p class="hint">Upload a photo of one card at a time, or several at once. Each is read and added as a row on the right — check it over before exporting.</p>
+
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Upload card photos">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <div class="label">Drop card photos here</div>
+        <div class="sub">or tap to choose &nbsp;·&nbsp; camera works too</div>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" multiple capture="environment">
+
+      <div class="queue" id="queue"></div>
+
+      <p class="no-sample-note" id="noSampleNote">
+        This view can't read card photos automatically right now. You can still add rows by hand in the table, or open this tool from within Claude.
+      </p>
+    </div>
+
+    <!-- LEDGER -->
+    <div class="ledger">
+      <div class="ledger-head">
+        <h2>Contacts<span class="count-pill" id="countPill"></span></h2>
+        <div class="actions">
+          <button class="act" id="addRowBtn" type="button">+ Add row</button>
+          <button class="act" id="copyBtn" type="button">Copy for Sheets</button>
+          <button class="act primary" id="csvBtn" type="button">Export CSV</button>
+          <button class="act danger" id="clearBtn" type="button">Clear all</button>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table id="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Designation</th>
+              <th>Company</th>
+              <th>Phone</th>
+              <th>Email</th>
+              <th>Website</th>
+              <th>Address</th>
+              <th>GSTIN</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="empty" id="emptyState">
+        <strong>No cards yet</strong>
+        Add a photo on the left, or click "+ Add row" to type one in by hand.
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="credit">CardSnap · a tool by <span class="wordmark"><span class="wm-ai">ai</span><span class="wm-4">4</span><span class="wm-work">work</span></span></footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var FIELDS = ["name","designation","company","phone","email","website","address","gstin","notes"];
+  var STORE_KEY = "card_catalog_contacts_v1";
+
+  var contacts = [];          // {id, ...FIELDS, status: 'ok'|'pending'|'error'}
+  var queueItems = [];        // {id, contactId, thumbUrl, file, state:'pending'|'ok'|'error', errText}
+
+  var tbody = document.getElementById("tbody");
+  var queueEl = document.getElementById("queue");
+  var emptyState = document.getElementById("emptyState");
+  var countPill = document.getElementById("countPill");
+  var toastEl = document.getElementById("toast");
+  var noSampleNote = document.getElementById("noSampleNote");
+  var dropEl = document.getElementById("drop");
+  var fileInput = document.getElementById("fileInput");
+
+  function uid(){ return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ toastEl.classList.remove("show"); }, 2400);
+  }
+
+  // ---------- persistence (per-viewer, this browser only) ----------
+  function save(){
+    try{
+      var plain = contacts.map(function(c){
+        var o = {id:c.id, status:c.status};
+        FIELDS.forEach(function(f){ o[f]=c[f]||""; });
+        return o;
+      });
+      localStorage.setItem(STORE_KEY, JSON.stringify(plain));
+    }catch(e){ /* storage unavailable — carry on in-memory */ }
+  }
+  function load(){
+    try{
+      var raw = localStorage.getItem(STORE_KEY);
+      if(raw){
+        var parsed = JSON.parse(raw);
+        if(Array.isArray(parsed)) contacts = parsed;
+      }
+    }catch(e){ contacts = []; }
+  }
+
+  // ---------- rendering ----------
+  function render(){
+    tbody.innerHTML = "";
+    if(contacts.length === 0){
+      emptyState.style.display = "block";
+    } else {
+      emptyState.style.display = "none";
+      contacts.forEach(renderRow);
+    }
+    countPill.textContent = contacts.length ? ("— " + contacts.length) : "";
+    save();
+  }
+
+  function renderRow(c){
+    var tr = document.createElement("tr");
+    if(c.status === "pending") tr.className = "pending";
+
+    FIELDS.forEach(function(f){
+      var td = document.createElement("td");
+      td.contentEditable = "true";
+      td.spellcheck = false;
+      if(f === "name") td.className = "name-cell";
+      td.textContent = c[f] || (c.status === "pending" && f === "name" ? "Reading card…" : "");
+      td.addEventListener("blur", function(){
+        c[f] = td.textContent.trim();
+        save();
+      });
+      tr.appendChild(td);
+    });
+
+    var delTd = document.createElement("td");
+    delTd.className = "del-cell";
+    if(c.status === "error"){
+      var tag = document.createElement("span");
+      tag.className = "status-tag";
+      tag.textContent = "check";
+      delTd.appendChild(tag);
+    }
+    var delBtn = document.createElement("button");
+    delBtn.className = "del-btn";
+    delBtn.title = "Remove row";
+    delBtn.textContent = "✕";
+    delBtn.addEventListener("click", function(){
+      contacts = contacts.filter(function(x){ return x.id !== c.id; });
+      render();
+    });
+    delTd.appendChild(delBtn);
+    tr.appendChild(delTd);
+
+    tbody.appendChild(tr);
+  }
+
+  function renderQueue(){
+    queueEl.innerHTML = "";
+    queueItems.slice().reverse().forEach(function(q){
+      var row = document.createElement("div");
+      row.className = "queue-item";
+
+      var img = document.createElement("img");
+      img.src = q.thumbUrl;
+      img.alt = "";
+      row.appendChild(img);
+
+      var meta = document.createElement("div");
+      meta.className = "qmeta";
+      var name = document.createElement("div");
+      name.className = "qname";
+      name.textContent = q.file.name;
+      var state = document.createElement("div");
+      state.className = "qstate " + (q.state === "error" ? "err" : q.state === "ok" ? "ok" : "");
+      state.textContent = q.state === "pending" ? "Reading…" : q.state === "ok" ? "Added" : (q.errText || "Couldn't read this one");
+      meta.appendChild(name);
+      meta.appendChild(state);
+      row.appendChild(meta);
+
+      if(q.state === "pending"){
+        var sp = document.createElement("div");
+        sp.className = "spinner";
+        row.appendChild(sp);
+      } else if(q.state === "error"){
+        var retry = document.createElement("button");
+        retry.className = "qretry";
+        retry.textContent = "Retry";
+        retry.addEventListener("click", function(){ retryQueueItem(q.id); });
+        row.appendChild(retry);
+      }
+
+      queueEl.appendChild(row);
+    });
+  }
+
+  // ---------- extraction ----------
+  var sampleNS = null;
+  var samplingOk = false;
+
+  function initSample(){
+    if(!window.claude || !window.claude.use){ noSampleNote.style.display = "block"; return; }
+    window.claude.use("sample").then(function(ns){
+      sampleNS = ns;
+      if(!ns){ noSampleNote.style.display = "block"; return; }
+      return ns.limits().then(function(lim){
+        samplingOk = !!(lim && lim.images);
+        if(!samplingOk) noSampleNote.style.display = "block";
+      }).catch(function(){
+        noSampleNote.style.display = "block";
+      });
+    }).catch(function(){
+      noSampleNote.style.display = "block";
+    });
+  }
+
+  var PROMPT = "You are transcribing a photographed visiting/business card into structured data. "
+    + "Reply with ONLY a JSON object with exactly these string keys: "
+    + "name, designation, company, phone, email, website, address, gstin, notes. "
+    + "Use \"\" for anything not printed or not legible on the card — never invent or guess a value. "
+    + "If there are multiple phone numbers, join them with \" / \". "
+    + "\"notes\" is for anything printed on the card that doesn't fit the other fields (e.g. a tagline, a second person's name). "
+    + "Do not include any text outside the JSON object.";
+
+  function addContactPending(){
+    var c = {id: uid(), status: "pending"};
+    FIELDS.forEach(function(f){ c[f] = ""; });
+    contacts.push(c);
+    render();
+    return c;
+  }
+
+  function processFile(file, queueId){
+    var q = queueItems.filter(function(x){ return x.id === queueId; })[0];
+    var contact = addContactPending();
+    if(q) q.contactId = contact.id;
+
+    if(!sampleNS || !samplingOk){
+      if(q){ q.state = "error"; q.errText = "Card reading unavailable here"; renderQueue(); }
+      contact.status = "error";
+      render();
+      return;
+    }
+
+    sampleNS.json(PROMPT, { images:[file], modelTier:"default", cache:false })
+      .then(function(data){
+        FIELDS.forEach(function(f){
+          var v = data && data[f];
+          contact[f] = (typeof v === "string") ? v.trim() : "";
+        });
+        contact.status = "ok";
+        render();
+        if(q){ q.state = "ok"; renderQueue(); }
+      })
+      .catch(function(err){
+        contact.status = "error";
+        render();
+        if(q){
+          q.state = "error";
+          q.errText = errCopy(err);
+          renderQueue();
+        }
+      });
+  }
+
+  function errCopy(e){
+    var code = e && e.code;
+    if(code === "not_granted") return "Reading declined for this session";
+    if(code === "image_rejected") return "Photo couldn't be used — try another";
+    if(code === "rate_limited") return "Busy — try again shortly";
+    if(code === "refused") return "Couldn't read this card";
+    return "Couldn't read this one — retry?";
+  }
+
+  function retryQueueItem(id){
+    var q = queueItems.filter(function(x){ return x.id === id; })[0];
+    if(!q) return;
+    if(q.contactId){
+      contacts = contacts.filter(function(x){ return x.id !== q.contactId; });
+    }
+    q.state = "pending";
+    renderQueue();
+    processFile(q.file, q.id);
+  }
+
+  // ---------- intake handlers ----------
+  function handleFiles(fileList){
+    var files = Array.prototype.slice.call(fileList || []).filter(function(f){
+      return f.type && f.type.indexOf("image/") === 0;
+    });
+    files.forEach(function(file){
+      var id = uid();
+      var thumbUrl = URL.createObjectURL(file);
+      queueItems.push({id:id, file:file, thumbUrl:thumbUrl, state:"pending"});
+      renderQueue();
+      processFile(file, id);
+    });
+  }
+
+  dropEl.addEventListener("click", function(){ fileInput.click(); });
+  dropEl.addEventListener("keydown", function(e){
+    if(e.key === "Enter" || e.key === " "){ e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener("change", function(){
+    handleFiles(fileInput.files);
+    fileInput.value = "";
+  });
+  ["dragenter","dragover"].forEach(function(ev){
+    dropEl.addEventListener(ev, function(e){ e.preventDefault(); dropEl.classList.add("drag"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    dropEl.addEventListener(ev, function(e){ e.preventDefault(); dropEl.classList.remove("drag"); });
+  });
+  dropEl.addEventListener("drop", function(e){
+    if(e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+  });
+
+  // ---------- manual add / clear ----------
+  document.getElementById("addRowBtn").addEventListener("click", function(){
+    var c = {id: uid(), status:"ok"};
+    FIELDS.forEach(function(f){ c[f] = ""; });
+    contacts.push(c);
+    render();
+    var lastRow = tbody.lastElementChild;
+    if(lastRow) { var firstCell = lastRow.querySelector("td[contenteditable]"); if(firstCell) firstCell.focus(); }
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", function(){
+    if(contacts.length === 0) return;
+    if(!confirm("Remove all " + contacts.length + " row(s)? This can't be undone.")) return;
+    contacts = [];
+    render();
+  });
+
+  // ---------- export ----------
+  function csvEscape(v){
+    v = (v == null) ? "" : String(v);
+    if(/[",\n]/.test(v)) v = '"' + v.replace(/"/g,'""') + '"';
+    return v;
+  }
+  function buildCSV(){
+    var header = ["Name","Designation","Company","Phone","Email","Website","Address","GSTIN","Notes"];
+    var lines = [header.map(csvEscape).join(",")];
+    contacts.forEach(function(c){
+      lines.push(FIELDS.map(function(f){ return csvEscape(c[f]); }).join(","));
+    });
+    return lines.join("\r\n");
+  }
+  function buildTSV(){
+    var header = ["Name","Designation","Company","Phone","Email","Website","Address","GSTIN","Notes"];
+    var lines = [header.join("\t")];
+    contacts.forEach(function(c){
+      lines.push(FIELDS.map(function(f){ return (c[f]||"").replace(/\t/g," ").replace(/\n/g," "); }).join("\t"));
+    });
+    return lines.join("\n");
+  }
+
+  document.getElementById("csvBtn").addEventListener("click", function(){
+    if(contacts.length === 0){ toast("Add a card first"); return; }
+    var csv = buildCSV();
+    claudeDownloadOrFallback(csv);
+  });
+
+  function claudeDownloadOrFallback(csv){
+    if(window.claude && window.claude.use){
+      window.claude.use("downloads").then(function(dl){
+        if(!dl){ fallbackDownload(csv); return; }
+        dl.save({filename:"cardsnap-contacts.csv", data:csv})
+          .then(function(){ toast("Saved. Open it in Google Sheets with File → Import."); })
+          .catch(function(err){
+            if(err && err.code === "declined") return;
+            fallbackDownload(csv);
+          });
+      }).catch(function(){ fallbackDownload(csv); });
+    } else {
+      fallbackDownload(csv);
+    }
+  }
+  function fallbackDownload(csv){
+    try{
+      var blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = "cardsnap-contacts.csv";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+      toast("Downloaded.");
+    }catch(e){
+      toast("Couldn't download — copy instead.");
+    }
+  }
+
+  document.getElementById("copyBtn").addEventListener("click", function(){
+    if(contacts.length === 0){ toast("Add a card first"); return; }
+    var tsv = buildTSV();
+    var done = function(){ toast("Copied — paste straight into a Google Sheet."); };
+    var fail = function(){ toast("Couldn't copy — try Export CSV instead."); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(tsv).then(done).catch(function(){
+        legacyCopy(tsv) ? done() : fail();
+      });
+    } else {
+      legacyCopy(tsv) ? done() : fail();
+    }
+  });
+  function legacyCopy(text){
+    try{
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    }catch(e){ return false; }
+  }
+
+  // ---------- init ----------
+  load();
+  render();
+  initSample();
+
+})();
+</script>
+</body>
+</html>
